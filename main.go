@@ -19,7 +19,7 @@ import (
 //go:embed configs/*.json
 var configFS embed.FS
 
-//go:embed sing-box-android-arm64
+//go:embed release/sing-box-android-arm64
 var embeddedFS embed.FS
 
 //go:embed web/index.html
@@ -214,7 +214,7 @@ func (m *SingBoxManager) Start(configPath string) error {
 	// 确保二进制文件存在
 	singboxPath := "/data/local/tmp/sing-box"
 	if _, err := os.Stat(singboxPath); os.IsNotExist(err) {
-		singData, err := fs.ReadFile(embeddedFS, "sing-box-android-arm64")
+		singData, err := fs.ReadFile(embeddedFS, "release/sing-box-android-arm64")
 		if err != nil {
 			return fmt.Errorf("读取二进制文件失败: %v", err)
 		}
