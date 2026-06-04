@@ -39,14 +39,14 @@ var gameConfigs = map[string]GameInfo{
 		File:     "configs/config_wwqy.json",
 		Enabled:  true,
 		Icon:     "🔫",
-		Platform: "PC",
+		Platform: "Android",
 	},
 	"sjz": {
 		Name:     "三角洲行动",
 		File:     "configs/config_sjz.json",
 		Enabled:  true,
 		Icon:     "🚁",
-		Platform: "PC",
+		Platform: "Android",
 	},
 	// 在这里添加新游戏示例：
 	// "lol": {
