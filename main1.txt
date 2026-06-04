@@ -1,0 +1,351 @@
+package main
+
+import (
+	"embed"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"io/fs"
+	"log"
+	"net/http"
+	"os"
+	"os/exec"
+	"strings"
+	"sync"
+	"time"
+)
+
+//go:embed configs/*.json
+var configFS embed.FS
+
+//go:embed sing-box-android-arm64
+var embeddedFS embed.FS
+
+//go:embed web/index.html
+var webFS embed.FS
+
+var configFiles = map[string]string{
+	"hp":   "configs/config_hp.json",
+	"wwqy": "configs/config_wwqy.json",
+	"sjz":  "configs/config_sjz.json",
+}
+
+type SingBoxManager struct {
+	cmd        *exec.Cmd
+	mu         sync.RWMutex
+	configPath string
+}
+
+type StartRequest struct {
+	Game     string `json:"game"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type StatusResponse struct {
+	Status     string `json:"status"`
+	ConfigPath string `json:"configPath,omitempty"`
+	Game       string `json:"game,omitempty"`
+	Message    string `json:"message,omitempty"`
+}
+
+type ErrorResponse struct {
+	Error   string `json:"error"`
+	Message string `json:"message"`
+}
+
+var manager = &SingBoxManager{}
+
+// 统一返回JSON格式
+func writeJSON(w http.ResponseWriter, data interface{}, statusCode int) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(statusCode)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		log.Printf("JSON编码失败: %v", err)
+	}
+}
+
+func writeError(w http.ResponseWriter, errMsg string, statusCode int) {
+	writeJSON(w, ErrorResponse{Error: errMsg, Message: "请求失败"}, statusCode)
+}
+
+// Start 启动 sing-box（非阻塞）
+func (m *SingBoxManager) Start(configPath string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.cmd != nil && m.cmd.Process != nil {
+		return fmt.Errorf("sing-box 已经在运行中")
+	}
+
+	// 确保二进制文件存在
+	singboxPath := "/data/local/tmp/sing-box"
+	if _, err := os.Stat(singboxPath); os.IsNotExist(err) {
+		singData, err := fs.ReadFile(embeddedFS, "sing-box-android-arm64")
+		if err != nil {
+			return fmt.Errorf("读取二进制文件失败: %v", err)
+		}
+		if err := os.WriteFile(singboxPath, singData, 0755); err != nil {
+			return fmt.Errorf("写入二进制文件失败: %v", err)
+		}
+		log.Printf("已写入二进制文件: %s", singboxPath)
+	}
+
+	cmd := exec.Command(singboxPath, "run", "-c", configPath)
+	cmd.Env = append(os.Environ(), "ENABLE_DEPRECATED_TUN_ADDRESS_X=true")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("启动失败: %v", err)
+	}
+
+	m.cmd = cmd
+	m.configPath = configPath
+	log.Printf("sing-box 已启动，配置文件: %s", configPath)
+
+	// 监控进程退出
+	go func() {
+		err := cmd.Wait()
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		if err != nil {
+			log.Printf("sing-box 进程退出: %v", err)
+		}
+		m.cmd = nil
+		m.configPath = ""
+	}()
+
+	return nil
+}
+
+// Stop 停止 sing-box
+func (m *SingBoxManager) Stop() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.cmd == nil || m.cmd.Process == nil {
+		return fmt.Errorf("sing-box 未运行")
+	}
+
+	if err := m.cmd.Process.Kill(); err != nil {
+		return fmt.Errorf("停止失败: %v", err)
+	}
+
+	// 清理临时配置文件
+	if m.configPath != "" {
+		os.Remove(m.configPath)
+		log.Printf("已清理配置文件: %s", m.configPath)
+	}
+
+	m.cmd = nil
+	m.configPath = ""
+
+	return nil
+}
+
+// Status 获取运行状态
+func (m *SingBoxManager) Status() StatusResponse {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	resp := StatusResponse{}
+	if m.cmd != nil && m.cmd.Process != nil {
+		resp.Status = "running"
+		resp.ConfigPath = m.configPath
+	} else {
+		resp.Status = "stopped"
+	}
+	return resp
+}
+
+// buildConfig 生成配置文件
+func buildConfig(game, username, password string) (string, error) {
+	// 查找配置文件模板
+	path, ok := configFiles[game]
+	if !ok {
+		return "", fmt.Errorf("无效的游戏代号: %s (支持: hp, wwqy, sjz)", game)
+	}
+
+	log.Printf("使用配置模板: %s", path)
+
+	// 读取模板配置
+	configBytes, err := fs.ReadFile(configFS, path)
+	if err != nil {
+		return "", fmt.Errorf("读取配置模板失败: %v", err)
+	}
+
+	// 替换占位符
+	config := strings.ReplaceAll(string(configBytes), "{{USERNAME}}", username)
+	config = strings.ReplaceAll(config, "{{PASSWORD}}", password)
+
+	// 创建临时配置文件
+	tmpFile, err := os.CreateTemp("", "singbox-config-*.json")
+	if err != nil {
+		return "", fmt.Errorf("创建临时文件失败: %v", err)
+	}
+	defer tmpFile.Close()
+
+	if _, err := tmpFile.WriteString(config); err != nil {
+		return "", fmt.Errorf("写入配置失败: %v", err)
+	}
+
+	log.Printf("已生成配置文件: %s", tmpFile.Name())
+	return tmpFile.Name(), nil
+}
+
+// HTTP 处理器
+func handleStart(w http.ResponseWriter, r *http.Request) {
+	log.Printf("收到启动请求: %s %s", r.Method, r.URL.Path)
+	
+	if r.Method != http.MethodPost {
+		writeError(w, "只支持POST方法", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req StartRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, fmt.Sprintf("无效的请求体: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("请求参数: game=%s, username=%s", req.Game, req.Username)
+
+	if req.Game == "" || req.Username == "" || req.Password == "" {
+		writeError(w, "缺少必要参数: game, username, password", http.StatusBadRequest)
+		return
+	}
+
+	// 生成配置文件
+	configPath, err := buildConfig(req.Game, req.Username, req.Password)
+	if err != nil {
+		writeError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 启动 sing-box
+	if err := manager.Start(configPath); err != nil {
+		writeError(w, err.Error(), http.StatusInternalServerError)
+		os.Remove(configPath)
+		return
+	}
+
+	writeJSON(w, map[string]string{
+		"status":  "started",
+		"message": "sing-box 启动成功",
+	}, http.StatusOK)
+}
+
+func handleStop(w http.ResponseWriter, r *http.Request) {
+	log.Printf("收到停止请求: %s %s", r.Method, r.URL.Path)
+	
+	if r.Method != http.MethodPost {
+		writeError(w, "只支持POST方法", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if err := manager.Stop(); err != nil {
+		writeError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, map[string]string{
+		"status":  "stopped",
+		"message": "sing-box 已停止",
+	}, http.StatusOK)
+}
+
+func handleStatus(w http.ResponseWriter, r *http.Request) {
+	log.Printf("收到状态查询: %s %s", r.Method, r.URL.Path)
+	
+	status := manager.Status()
+	writeJSON(w, status, http.StatusOK)
+}
+
+func handleHealth(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]string{
+		"status": "ok",
+		"time":   time.Now().Format(time.RFC3339),
+	}, http.StatusOK)
+}
+
+// 中间件：记录请求和恢复panic
+func loggingMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Printf("panic: %v", err)
+				writeError(w, fmt.Sprintf("内部错误: %v", err), http.StatusInternalServerError)
+			}
+		}()
+		log.Printf("请求: %s %s", r.Method, r.URL.Path)
+		next(w, r)
+	}
+}
+
+func main() {
+	// 支持命令行模式
+	cliMode := flag.Bool("cli", false, "CLI模式（默认Web模式）")
+	game := flag.String("g", "", "游戏代号 (hp/wwqy/sjz)")
+	username := flag.String("u", "", "SOCKS5 用户名")
+	password := flag.String("p", "", "SOCKS5 密码")
+	port := flag.String("port", "12345", "Web服务端口")
+	flag.Parse()
+
+	// CLI模式
+	if *cliMode {
+		if *game == "" || *username == "" || *password == "" {
+			fmt.Println("用法: ./prog -cli -g hp -u 用户名 -p 密码")
+			return
+		}
+
+		configPath, err := buildConfig(*game, *username, *password)
+		if err != nil {
+			fmt.Println("生成配置失败:", err)
+			return
+		}
+		defer os.Remove(configPath)
+
+		if err := manager.Start(configPath); err != nil {
+			fmt.Println("启动失败:", err)
+			return
+		}
+
+		fmt.Println("sing-box 已启动，按 Ctrl+C 停止")
+		select {}
+	}
+
+	// Web模式
+	// 读取HTML文件
+	htmlContent, err := fs.ReadFile(webFS, "web/index.html")
+	if err != nil {
+		log.Printf("警告: 读取index.html失败: %v", err)
+		log.Println("将使用默认HTML")
+		htmlContent = []byte(`<html><body><h1>Sing-Box Control Panel</h1><p>API endpoints: /api/start, /api/stop, /api/status</p></body></html>`)
+	}
+
+	// 首页
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(htmlContent)
+	})
+
+	// API路由（带日志和恢复中间件）
+	http.HandleFunc("/api/start", loggingMiddleware(handleStart))
+	http.HandleFunc("/api/stop", loggingMiddleware(handleStop))
+	http.HandleFunc("/api/status", loggingMiddleware(handleStatus))
+	http.HandleFunc("/api/health", loggingMiddleware(handleHealth))
+
+	addr := ":" + *port
+	fmt.Printf("🚀 Web控制面板启动: http://127.0.0.1%s\n", addr)
+	fmt.Println("📊 API端点:")
+	fmt.Printf("   - POST %s/api/start\n", addr)
+	fmt.Printf("   - POST %s/api/stop\n", addr)
+	fmt.Printf("   - GET  %s/api/status\n", addr)
+	fmt.Println("按 Ctrl+C 退出")
+
+	// 启动服务器
+	if err := http.ListenAndServe(addr, nil); err != nil {
+		log.Fatalf("HTTP服务启动失败: %v", err)
+	}
+}

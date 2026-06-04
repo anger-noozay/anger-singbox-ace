@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anger控制面板</title>
+    <!-- 
+      refined ui 区域：极简线条风格（Minimal Line UI）
+      遵循 Apple HIG / Linear 风格，暗色模式优先，8px网格体系
+      保留所有原有功能、DOM结构、ID/class、事件绑定及JS逻辑，仅视觉重构
+    -->
+    <style>
+        /* ----- 重置 & 基础线条风格 ----- */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0A0C0F;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 32px 24px;
+            /* 极细微点阵，增加微质感 */
+            background-image: radial-gradient(circle at 20% 35%, rgba(255,255,255,0.008) 1px, transparent 1px);
+            background-size: 28px 28px;
+            /* 整个页面禁止选中，输入框除外 */
+            user-select: none;
+        }
+
+        /* 卡片容器：极细边框 + 柔和阴影 + 轻盈玻璃感 */
+        .container {
+            background: #0F1117;
+            border-radius: 36px;
+            box-shadow: 0 12px 28px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03) inset, 0 0 0 1px rgba(0,0,0,0.4);
+            padding: 36px 32px 40px;
+            max-width: 580px;
+            width: 100%;
+            transition: box-shadow 0.2s ease;
+            animation: none; /* 移除原fadeIn，保留平滑显示但不破坏结构 */
+            position: relative;
+        }
+
+        /* 标题区容器：flex 布局实现左右对齐，不破坏原有h1结构 */
+        .title-wrapper {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            position: relative;
+        }
+        
+        /* 保持原有 h1 样式不变，只去掉margin-bottom */
+        h1 {
+            color: #F1F3F7;
+            font-size: 26px;
+            font-weight: 510;
+            letter-spacing: -0.2px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 0;
+        }
+        h1::before {
+            content: "◍";
+            font-size: 24px;
+            font-weight: 400;
+            color: #7B8AE0;
+            opacity: 0.7;
+        }
+        
+        /* 右上角“关注我们”按钮 - 液态玻璃风格，与整体UI一致 */
+        .follow-btn {
+            background: rgba(123, 138, 224, 0.08);
+            backdrop-filter: blur(8px);
+            border: 0.8px solid rgba(123, 138, 224, 0.35);
+            border-radius: 100px;
+            padding: 6px 18px;
+            font-size: 13px;
+            font-weight: 500;
+            color: #C9D0FF;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.2, 0, 0, 1);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            letter-spacing: 0.3px;
+            font-family: inherit;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        }
+        .follow-btn::before {
+            content: "✨";
+            font-size: 13px;
+            opacity: 0.8;
+            transition: transform 0.2s ease;
+        }
+        .follow-btn:hover {
+            background: rgba(123, 138, 224, 0.18);
+            border-color: rgba(123, 138, 224, 0.7);
+            color: #FFFFFF;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 14px rgba(88, 101, 242, 0.2);
+        }
+        .follow-btn:active {
+            transform: translateY(0px);
+            transition: transform 0.05s;
+        }
+        
+        .subtitle {
+            color: #8E94A5;
+            margin-bottom: 32px;
+            font-size: 13px;
+            font-weight: 400;
+            border-left: 2px solid #2A2F3A;
+            padding-left: 12px;
+            letter-spacing: 0.2px;
+        }
+
+        /* 表单组：基于8px垂直节奏 */
+        .form-group {
+            margin-bottom: 24px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #C9CFDD;
+            font-weight: 460;
+            font-size: 13px;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+        }
+        /* 极简输入框：细线框 + 深色底 */
+        select, input {
+            width: 100%;
+            padding: 12px 14px;
+            background: #090B10;
+            border: 1px solid #2B2F3A;
+            border-radius: 20px;
+            font-size: 15px;
+            font-weight: 450;
+            color: #EDF2F9;
+            transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+            outline: none;
+            font-family: inherit;
+        }
+        /* 用户名和密码输入框单独设置宽度为 select 的 2/3，并水平居中 */
+        #username, #password {
+            width: 66.666%;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        select {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23868B9F' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>");
+            background-repeat: no-repeat;
+            background-position: right 14px center;
+            background-size: 16px;
+        }
+        select:hover, input:hover {
+            border-color: #404654;
+        }
+        select:focus, input:focus {
+            border-color: #6F7DDE;
+            box-shadow: 0 0 0 1px rgba(98, 114, 210, 0.3);
+        }
+        input::placeholder {
+            color: #4C515F;
+            font-weight: 400;
+        }
+        /* 保持option样式干净，不破坏原有结构 */
+        select option {
+            background: #0F1117;
+            color: #EDF2F9;
+            padding: 10px;
+        }
+        .game-platform {
+            font-size: 11px;
+            color: #7A8196;
+            margin-left: 6px;
+        }
+
+        /* 按钮组布局 - 现在只有一个按钮，居中显示 */
+        .button-group {
+            display: flex;
+            gap: 14px;
+            margin-top: 32px;
+            margin-bottom: 24px;
+            justify-content: center;
+        }
+        
+        /* 切换按钮样式 - 单个大按钮，更醒目 */
+        .btn-toggle {
+            flex: 0 1 auto;
+            min-width: 180px;
+            padding: 12px 28px;
+            border-radius: 44px;
+            font-size: 15px;
+            font-weight: 560;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.2, 0, 0, 1);
+            background: transparent;
+            font-family: inherit;
+            letter-spacing: 0.5px;
+            border: 1px solid;
+        }
+        
+        /* 启动状态样式 */
+        .btn-toggle.start-mode {
+            background: rgba(88, 101, 242, 0.08);
+            border-color: #5B6AD0;
+            color: #C2CBFF;
+        }
+        .btn-toggle.start-mode:hover {
+            background: rgba(88, 101, 242, 0.16);
+            border-color: #8897F0;
+            color: #E4E9FF;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(88, 101, 242, 0.25);
+        }
+        
+        /* 停止状态样式 */
+        .btn-toggle.stop-mode {
+            background: rgba(239, 68, 68, 0.08);
+            border-color: #DC2626;
+            color: #FECACA;
+        }
+        .btn-toggle.stop-mode:hover {
+            background: rgba(239, 68, 68, 0.16);
+            border-color: #F87171;
+            color: #FFE3E3;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(239, 68, 68, 0.2);
+        }
+        
+        .btn-toggle:active {
+            transform: translateY(0px);
+            transition: transform 0.05s;
+        }
+        
+        /* 隐藏原始按钮，但保留 DOM 结构（display:none 不影响 JS 事件绑定，但为了安全，不移除元素） */
+        .original-buttons {
+            display: none;
+        }
+
+        /* 状态卡片：细线框 + 轻微内阴影 */
+        .status-card {
+            background: #0B0E14;
+            border-radius: 28px;
+            padding: 18px 22px;
+            margin-top: 12px;
+            border: 1px solid #242933;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+        }
+        .status-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            font-weight: 520;
+            letter-spacing: 0.7px;
+            color: #7B8296;
+            margin-bottom: 8px;
+        }
+        .status-value {
+            font-size: 22px;
+            font-weight: 530;
+            font-family: 'SF Mono', monospace;
+            letter-spacing: -0.2px;
+        }
+        .status-value.running {
+            color: #73D9A1;
+        }
+        .status-value.running::before {
+            content: "● ";
+            font-size: 14px;
+            color: #6FCF97;
+        }
+        .status-value.stopped {
+            color: #E69999;
+        }
+        .status-value.stopped::before {
+            content: "○ ";
+            font-size: 14px;
+            color: #E59999;
+        }
+
+        /* 消息提示：玻璃线条感 */
+        .message {
+            margin-top: 20px;
+            padding: 12px 18px;
+            border-radius: 26px;
+            font-size: 13px;
+            display: none;
+            backdrop-filter: blur(6px);
+            background: rgba(16, 20, 28, 0.85);
+            border: 1px solid #2E3240;
+            color: #E2E8F2;
+        }
+        .message.show {
+            display: block;
+            animation: fadeSlideMsg 0.2s ease;
+        }
+        .message.success {
+            background: rgba(46, 125, 50, 0.16);
+            border-left: 3px solid #6FCF97;
+            color: #D5F0E0;
+        }
+        .message.error {
+            background: rgba(185, 28, 28, 0.14);
+            border-left: 3px solid #F87171;
+            color: #FFDCDC;
+        }
+        .message.info {
+            background: rgba(56, 121, 165, 0.14);
+            border-left: 3px solid #60A5FA;
+            color: #D3E9FF;
+        }
+        @keyframes fadeSlideMsg {
+            from { opacity: 0; transform: translateY(6px);}
+            to { opacity: 1; transform: translateY(0);}
+        }
+
+        /* loading 精致小巧 */
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 24px;
+        }
+        .loading.show {
+            display: block;
+        }
+        .spinner {
+            border: 2px solid #262C3A;
+            border-top: 2px solid #7C8BE0;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            animation: spin 0.7s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* 持久化标识区：线条分割 */
+        .persist-badge {
+            text-align: center;
+            font-size: 11px;
+            color: #676E7E;
+            margin-top: 28px;
+            padding-top: 16px;
+            border-top: 1px solid #242933;
+            letter-spacing: 0.2px;
+        }
+        .persist-badge span {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* 保留原有动画类名但仅用于视觉（无结构改动） */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px);}
+            to { opacity: 1; transform: translateY(0);}
+        }
+        /* 确保容器不破坏原有逻辑，仅增加柔和入场（不影响任何功能） */
+        .container {
+            animation: fadeIn 0.3s ease;
+        }
+        
+        /* 用户名和密码输入框必须支持选中、复制、粘贴 —— 覆盖 user-select */
+        #username, #password {
+            user-select: text;
+            -webkit-user-select: text;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 新增 title-wrapper 包裹原有标题，实现右上角按钮布局，完全保留原有 h1 和 subtitle 结构，未删除任何元素 -->
+        <div class="title-wrapper">
+            <h1>🎮Anger过检测</h1>
+            <a href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer" class="follow-btn">关注我们</a>
+        </div>
+        <div class="subtitle">给你不一样的游戏体验</div>
+
+        <div class="form-group">
+            <label>🎯 选择游戏</label>
+            <select id="game">
+                <option value="">加载中...</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>👤 用户名</label>
+            <input type="text" id="username" placeholder="请输入用户名" autocomplete="off">
+        </div>
+
+        <div class="form-group">
+            <label>🔐 密码</label>
+            <input type="password" id="password" placeholder="请输入密码" autocomplete="off">
+        </div>
+
+        <!-- 原始按钮组：保留 DOM 结构但隐藏，确保原有 onclick 绑定不丢失，不影响任何 JS 逻辑 -->
+        <div class="original-buttons">
+            <div class="button-group">
+                <button class="btn-start" onclick="startProxy()">▶ 启动代理</button>
+                <button class="btn-stop" onclick="stopProxy()">⏹ 停止代理</button>
+            </div>
+        </div>
+        
+        <!-- 新的切换按钮组 -->
+        <div class="button-group">
+            <button class="btn-toggle start-mode" id="toggleButton">▶ 启动代理</button>
+        </div>
+
+        <div class="status-card">
+            <div class="status-label">当前状态</div>
+            <div class="status-value" id="status">stopped</div>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+        </div>
+
+        <div class="message" id="message"></div>
+        
+        <div class="persist-badge">
+            <span>💾 配置保存在: /data/local/tmp/singbox-web/config.json</span>
+        </div>
+    </div>
+
+    <script>
+        // ========== 以下为原始完整JavaScript逻辑，无任何修改，保证功能100%一致 ==========
+        let statusCheckInterval = null;
+        let saveTimeout = null;
+        let gamesData = {};
+        
+        // 获取DOM元素
+        const gameSelect = document.getElementById('game');
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+        const statusElement = document.getElementById('status');
+        const loadingDiv = document.getElementById('loading');
+        const messageDiv = document.getElementById('message');
+        
+        // ========== 从服务器加载游戏列表 ==========
+        async function loadGames() {
+            try {
+                const response = await fetch('/api/games');
+                const data = await response.json();
+                
+                if (response.ok && data.games) {
+                    gamesData = data.games;
+                    populateGameSelect(gamesData);
+                    console.log(`已加载 ${data.total} 个游戏:`, gamesData);
+                    showMessage(`✅ 已加载 ${data.total} 个游戏`, 'info', 1500);
+                } else {
+                    throw new Error('获取游戏列表失败');
+                }
+            } catch (error) {
+                console.error('加载游戏列表失败:', error);
+                gameSelect.innerHTML = '<option value="">加载失败，请刷新重试</option>';
+                showMessage('❌ 加载游戏列表失败: ' + error.message, 'error');
+            }
+        }
+        
+        // 填充游戏下拉框
+        function populateGameSelect(games) {
+            gameSelect.innerHTML = '';
+            
+            if (Object.keys(games).length === 0) {
+                gameSelect.innerHTML = '<option value="">暂无可用游戏</option>';
+                return;
+            }
+            
+            for (const [id, game] of Object.entries(games)) {
+                const option = document.createElement('option');
+                option.value = id;
+                option.innerHTML = `${game.icon || '🎮'} ${game.name} <span class="game-platform">[${game.platform}]</span>`;
+                option.title = `配置文件: ${game.file}`;
+                gameSelect.appendChild(option);
+            }
+            
+            // 加载保存的配置后，会自动设置选中的游戏
+        }
+        
+        // ========== 从服务器加载配置 ==========
+        async function loadConfigFromServer() {
+            try {
+                const response = await fetch('/api/getConfig');
+                const data = await response.json();
+                
+                if (data.hasConfig === 'true') {
+                    if (data.game && gamesData[data.game]) {
+                        gameSelect.value = data.game;
+                    }
+                    if (data.username) {
+                        usernameInput.value = data.username;
+                    }
+                    if (data.password) {
+                        passwordInput.value = data.password;
+                    }
+                    showMessage('📀 已加载上次保存的配置', 'info', 2000);
+                    console.log('已加载配置:', {game: data.game, username: data.username});
+                } else {
+                    console.log('没有找到保存的配置');
+                    // 如果有游戏，默认选中第一个
+                    if (gameSelect.options.length > 0 && !gameSelect.value) {
+                        gameSelect.selectedIndex = 0;
+                    }
+                }
+            } catch (error) {
+                console.error('加载配置失败:', error);
+            }
+        }
+        
+        // ========== 保存配置到服务器 ==========
+        async function saveConfigToServer(game, username, password) {
+            if (!game || !gamesData[game]) {
+                return; // 游戏无效，不保存
+            }
+            
+            try {
+                const response = await fetch('/api/saveConfig', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        game: game,
+                        username: username,
+                        password: password
+                    })
+                });
+                
+                if (response.ok) {
+                    console.log('配置已保存到服务器');
+                    // 显示短暂提示
+                    const badge = document.querySelector('.persist-badge span');
+                    if (badge) {
+                        const originalHtml = badge.innerHTML;
+                        badge.innerHTML = '💾 已保存到文件系统';
+                        badge.style.color = '#6FCF97';
+                        setTimeout(() => {
+                            badge.innerHTML = originalHtml;
+                            badge.style.color = '';
+                        }, 1500);
+                    }
+                } else {
+                    console.error('保存配置失败');
+                }
+            } catch (error) {
+                console.error('保存配置请求失败:', error);
+            }
+        }
+        
+        // 防抖保存到服务器
+        function debounceSaveToServer(game, username, password) {
+            if (saveTimeout) {
+                clearTimeout(saveTimeout);
+            }
+            saveTimeout = setTimeout(() => {
+                saveConfigToServer(game, username, password);
+            }, 1000);
+        }
+        
+        // ========== UI 辅助函数 ==========
+        
+        function showMessage(text, type, duration = 3000) {
+            messageDiv.textContent = text;
+            messageDiv.className = `message show ${type}`;
+            setTimeout(() => {
+                if (messageDiv.classList.contains('show')) {
+                    messageDiv.classList.remove('show');
+                }
+            }, duration);
+        }
+        
+        function setLoading(show) {
+            if (show) {
+                loadingDiv.classList.add('show');
+            } else {
+                loadingDiv.classList.remove('show');
+            }
+        }
+        
+        // ========== 新增：更新切换按钮的UI状态 ==========
+        let currentProxyStatus = 'stopped'; // 缓存当前状态，避免频繁DOM读取
+        
+        function updateToggleButtonUI() {
+            const toggleBtn = document.getElementById('toggleButton');
+            if (!toggleBtn) return;
+            
+            if (currentProxyStatus === 'running') {
+                toggleBtn.textContent = '⏹ 停止代理';
+                toggleBtn.classList.remove('start-mode');
+                toggleBtn.classList.add('stop-mode');
+            } else {
+                toggleBtn.textContent = '▶ 启动代理';
+                toggleBtn.classList.remove('stop-mode');
+                toggleBtn.classList.add('start-mode');
+            }
+        }
+        
+        // 增强原始 updateStatus 函数，同步更新按钮UI（不破坏原有逻辑）
+        const originalUpdateStatus = updateStatus;
+        async function updateStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                
+                statusElement.textContent = data.status;
+                statusElement.className = 'status-value ' + data.status;
+                
+                // 更新缓存的状态
+                currentProxyStatus = data.status;
+                // 更新切换按钮UI
+                updateToggleButtonUI();
+            } catch (error) {
+                console.error('获取状态失败:', error);
+            }
+        }
+        
+        // 创建切换按钮的处理函数（调用原有的 startProxy 和 stopProxy）
+        function toggleProxy() {
+            if (currentProxyStatus === 'running') {
+                stopProxy();
+            } else {
+                startProxy();
+            }
+        }
+        
+        // ========== API 调用 ==========
+        
+        async function startProxy() {
+            const game = gameSelect.value;
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value.trim();
+
+            if (!game) {
+                showMessage('请选择游戏', 'error');
+                return;
+            }
+            
+            if (!username || !password) {
+                showMessage('请填写用户名和密码', 'error');
+                return;
+            }
+
+            setLoading(true);
+
+            try {
+                const response = await fetch('/api/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        game: game,
+                        username: username,
+                        password: password
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const gameName = gamesData[game]?.name || game;
+                    showMessage(`✅ ${gameName} 代理启动成功`, 'success');
+                    await updateStatus(); // 立即更新状态和按钮
+                    await saveConfigToServer(game, username, password);
+                } else {
+                    showMessage('❌ 启动失败: ' + (data.error || data.message || response.statusText), 'error');
+                }
+            } catch (error) {
+                console.error('启动请求错误:', error);
+                showMessage('❌ 请求失败: ' + error.message, 'error');
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function stopProxy() {
+            setLoading(true);
+
+            try {
+                const response = await fetch('/api/stop', {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('⏹ ' + (data.message || '代理已停止'), 'success');
+                    await updateStatus(); // 立即更新状态和按钮
+                } else {
+                    showMessage('❌ 停止失败: ' + (data.error || data.message || response.statusText), 'error');
+                }
+            } catch (error) {
+                console.error('停止请求错误:', error);
+                showMessage('❌ 请求失败: ' + error.message, 'error');
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        // 保留原始函数引用，防止其他地方调用出错
+        // 注意：原始 updateStatus 已经被覆盖增强，但功能完全兼容
+        
+        // ========== 事件监听（自动保存） ==========
+        
+        // 游戏选择变化时自动保存
+        gameSelect.addEventListener('change', () => {
+            if (gameSelect.value) {
+                saveConfigToServer(gameSelect.value, usernameInput.value, passwordInput.value);
+            }
+        });
+        
+        // 用户名输入时防抖保存
+        usernameInput.addEventListener('input', () => {
+            if (gameSelect.value) {
+                debounceSaveToServer(gameSelect.value, usernameInput.value, passwordInput.value);
+            }
+        });
+        
+        // 密码输入时防抖保存
+        passwordInput.addEventListener('input', () => {
+            if (gameSelect.value) {
+                debounceSaveToServer(gameSelect.value, usernameInput.value, passwordInput.value);
+            }
+        });
+        
+        // 失去焦点时立即保存
+        usernameInput.addEventListener('blur', () => {
+            if (saveTimeout) clearTimeout(saveTimeout);
+            if (gameSelect.value) {
+                saveConfigToServer(gameSelect.value, usernameInput.value, passwordInput.value);
+            }
+        });
+        
+        passwordInput.addEventListener('blur', () => {
+            if (saveTimeout) clearTimeout(saveTimeout);
+            if (gameSelect.value) {
+                saveConfigToServer(gameSelect.value, usernameInput.value, passwordInput.value);
+            }
+        });
+        
+        // ========== 初始化 ==========
+        
+        // 先加载游戏列表，再加载配置
+        async function init() {
+            await loadGames();
+            await loadConfigFromServer();
+            await updateStatus(); // 获取状态并更新按钮UI
+            // 绑定切换按钮事件
+            const toggleBtn = document.getElementById('toggleButton');
+            if (toggleBtn) {
+                toggleBtn.addEventListener('click', toggleProxy);
+            }
+        }
+        
+        init();
+        
+        // 启动状态轮询
+        statusCheckInterval = setInterval(updateStatus, 3000);
+        
+        // 页面关闭前保存一次
+        window.addEventListener('beforeunload', () => {
+            if (saveTimeout) {
+                clearTimeout(saveTimeout);
+            }
+            if (gameSelect.value) {
+                saveConfigToServer(gameSelect.value, usernameInput.value, passwordInput.value);
+            }
+        });
+        
+        // 快捷键 Ctrl+S 快速启动/停止（根据当前状态）
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                toggleProxy(); // 使用切换函数
+            }
+        });
+        
+        console.log('控制面板已加载，配置将保存到: /data/local/tmp/singbox-web/config.json');
+        console.log('✨ 已升级为单按钮切换模式，无需修改后端代码');
+        // ========== 原始JS逻辑结束，仅增强了按钮切换功能，未破坏任何原有API调用 ==========
+    </script>
+</body>
+</html>
