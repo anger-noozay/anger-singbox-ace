@@ -41,13 +41,13 @@ var gameConfigs = map[string]GameInfo{
 		Icon:     "🔫",
 		Platform: "Android",
 	},
-	"sjz": {
+	/*"sjz": {
 		Name:     "三角洲行动",
 		File:     "configs/config_sjz.json",
 		Enabled:  true,
 		Icon:     "🚁",
 		Platform: "Android",
-	},
+	},*/
 	// 在这里添加新游戏示例：
 	// "lol": {
 	//     Name:     "英雄联盟",

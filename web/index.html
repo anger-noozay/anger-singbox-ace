@@ -2,14 +2,8 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>Anger控制面板 · 极简线条</title>
-    <!-- 
-      refined ui 区域：极简线条风格（Minimal Line UI）
-      遵循 Apple HIG / Linear 风格，暗色模式优先，8px网格体系
-      保留所有原有功能、DOM结构、ID/class、事件绑定及JS逻辑，仅视觉重构
-      【更新内容】说明按钮：现在点击后使用系统默认浏览器跳转指定网址 (https://lingjingyun.com/help)
-    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anger控制面板</title>
     <style>
         /* ----- 重置 & 基础线条风格 ----- */
         * {
@@ -26,14 +20,11 @@
             justify-content: center;
             align-items: center;
             padding: 32px 24px;
-            /* 极细微点阵，增加微质感 */
             background-image: radial-gradient(circle at 20% 35%, rgba(255,255,255,0.008) 1px, transparent 1px);
             background-size: 28px 28px;
-            /* 整个页面禁止选中，输入框除外 */
             user-select: none;
         }
 
-        /* 卡片容器：极细边框 + 柔和阴影 + 轻盈玻璃感 */
         .container {
             background: #0F1117;
             border-radius: 36px;
@@ -42,11 +33,9 @@
             max-width: 580px;
             width: 100%;
             transition: box-shadow 0.2s ease;
-            animation: none;
             position: relative;
         }
 
-        /* 标题区容器：flex 布局实现左右对齐，不破坏原有h1结构 */
         .title-wrapper {
             display: flex;
             justify-content: space-between;
@@ -55,7 +44,6 @@
             position: relative;
         }
         
-        /* 保持原有 h1 样式不变，只去掉margin-bottom */
         h1 {
             color: #F1F3F7;
             font-size: 26px;
@@ -74,7 +62,7 @@
             opacity: 0.7;
         }
         
-        /* 右上角“说明”按钮 - 更新后使用原生跳转（系统默认浏览器） */
+        /* 说明按钮样式 */
         .follow-btn {
             background: rgba(123, 138, 224, 0.08);
             backdrop-filter: blur(8px);
@@ -122,7 +110,6 @@
             letter-spacing: 0.2px;
         }
 
-        /* 表单组：基于8px垂直节奏 */
         .form-group {
             margin-bottom: 24px;
         }
@@ -135,7 +122,6 @@
             letter-spacing: 0.3px;
             text-transform: uppercase;
         }
-        /* 极简输入框：细线框 + 深色底 */
         select, input {
             width: 100%;
             padding: 12px 14px;
@@ -149,11 +135,9 @@
             outline: none;
             font-family: inherit;
         }
-        /* 用户名和密码输入框单独设置宽度为 select 的 2/3，并水平居中 */
         #username, #password {
             width: 66.666%;
             display: block;
-            
         }
         select {
             cursor: pointer;
@@ -174,7 +158,6 @@
             color: #4C515F;
             font-weight: 400;
         }
-        /* 保持option样式干净，不破坏原有结构 */
         select option {
             background: #0F1117;
             color: #EDF2F9;
@@ -186,7 +169,6 @@
             margin-left: 6px;
         }
 
-        /* 按钮组布局 - 现在只有一个按钮，居中显示 */
         .button-group {
             display: flex;
             gap: 14px;
@@ -195,7 +177,6 @@
             justify-content: center;
         }
         
-        /* 切换按钮样式 - 单个大按钮，更醒目 */
         .btn-toggle {
             flex: 0 1 auto;
             min-width: 180px;
@@ -211,7 +192,6 @@
             border: 1px solid;
         }
         
-        /* 启动状态样式 */
         .btn-toggle.start-mode {
             background: rgba(88, 101, 242, 0.08);
             border-color: #5B6AD0;
@@ -225,7 +205,6 @@
             box-shadow: 0 8px 20px rgba(88, 101, 242, 0.25);
         }
         
-        /* 停止状态样式 */
         .btn-toggle.stop-mode {
             background: rgba(239, 68, 68, 0.08);
             border-color: #DC2626;
@@ -244,12 +223,10 @@
             transition: transform 0.05s;
         }
         
-        /* 隐藏原始按钮，但保留 DOM 结构（display:none 不影响 JS 事件绑定，但为了安全，不移除元素） */
         .original-buttons {
             display: none;
         }
 
-        /* 状态卡片：细线框 + 轻微内阴影 */
         .status-card {
             background: #0B0E14;
             border-radius: 28px;
@@ -289,7 +266,6 @@
             color: #E59999;
         }
 
-        /* 消息提示：玻璃线条感 */
         .message {
             margin-top: 20px;
             padding: 12px 18px;
@@ -325,7 +301,6 @@
             to { opacity: 1; transform: translateY(0);}
         }
 
-        /* loading 精致小巧 */
         .loading {
             display: none;
             text-align: center;
@@ -348,7 +323,6 @@
             100% { transform: rotate(360deg); }
         }
 
-        /* 持久化标识区：线条分割 */
         .persist-badge {
             text-align: center;
             font-size: 11px;
@@ -364,17 +338,14 @@
             gap: 6px;
         }
 
-        /* 保留原有动画类名但仅用于视觉（无结构改动） */
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px);}
             to { opacity: 1; transform: translateY(0);}
         }
-        /* 确保容器不破坏原有逻辑，仅增加柔和入场（不影响任何功能） */
         .container {
             animation: fadeIn 0.3s ease;
         }
         
-        /* 用户名和密码输入框必须支持选中、复制、粘贴 —— 覆盖 user-select */
         #username, #password {
             user-select: text;
             -webkit-user-select: text;
@@ -383,12 +354,11 @@
 </head>
 <body>
     <div class="container">
-        <!-- title-wrapper 包裹原有标题，右上角“说明”按钮已更新跳转逻辑 -->
         <div class="title-wrapper">
-            <h1>🎮Anger过检测</h1>
-            <a href="https://www.anger.us.kg" target="_blank" rel="noopener noreferrer" class="follow-btn">说明</a>
+            <h1>🎮Anger</h1>
+            <div class="follow-btn" id="helpBtn">说明</div>
         </div>
-        <div class="subtitle">给你不一样的游戏体验</div>
+        <div class="subtitle">腾讯游戏过检测器</div>
 
         <div class="form-group">
             <label>🎯 选择游戏</label>
@@ -407,7 +377,6 @@
             <input type="password" id="password" placeholder="请输入密码" autocomplete="off">
         </div>
 
-        <!-- 原始按钮组：保留 DOM 结构但隐藏，确保原有 onclick 绑定不丢失，不影响任何 JS 逻辑 -->
         <div class="original-buttons">
             <div class="button-group">
                 <button class="btn-start" onclick="startProxy()">▶ 启动代理</button>
@@ -415,7 +384,6 @@
             </div>
         </div>
         
-        <!-- 新的切换按钮组 -->
         <div class="button-group">
             <button class="btn-toggle start-mode" id="toggleButton">▶ 启动代理</button>
         </div>
@@ -432,20 +400,83 @@
         <div class="message" id="message"></div>
         
         <div class="persist-badge">
-            <span>💾 配置保存在: /data/local/tmp/singbox-web/config.json</span>
+            <span>欢迎使用Anger过检测</span>
         </div>
     </div>
 
     <script>
-        // ========== 以下为原始完整JavaScript逻辑，无任何功能破坏，且保证说明按钮已使用系统浏览器打开指定网址 ==========
-        // 额外补充：说明按钮通过 <a> 原生 target="_blank" 实现在系统默认浏览器中跳转，完全符合需求。
-        // 所有后端API交互、配置保存、状态轮询均保持完全一致
+        // ========== 打开系统浏览器的函数 ==========
+        const HELP_URL = "https://www.anger.us.kg/";
         
+        /**
+         * 打开系统浏览器
+         * 方案1: 使用 ksu.exec (KernelSU 命令执行，适用于 Root 环境)
+         * 方案2: 使用 window.open (通用备选方案)
+         */
+        function openInSystemBrowser(url) {
+            console.log('尝试打开链接:', url);
+            
+            // 方案1: 使用 ksu.exec (KernelSU/APatch 环境)
+            if (typeof ksu !== 'undefined' && ksu.exec && typeof ksu.exec === 'function') {
+                try {
+                    const cmd = `am start -a android.intent.action.VIEW -c android.intent.category.BROWSABLE -d '${url}'`;
+                    console.log('执行 ksu.exec:', cmd);
+                    
+                    ksu.exec(cmd, (errno, stdout, stderr) => {
+                        if (errno === 0) {
+                            console.log('ksu.exec 成功，浏览器已打开');
+                            showMessage('📖 已打开帮助页面', 'info', 2000);
+                        } else {
+                            console.error('ksu.exec 失败:', errno, stderr);
+                            // 备用方案
+                            fallbackOpen(url);
+                        }
+                    });
+                    return;
+                } catch (e) {
+                    console.error('ksu.exec 调用异常:', e);
+                    fallbackOpen(url);
+                    return;
+                }
+            }
+            
+            // 方案2: 通用备选方案
+            fallbackOpen(url);
+        }
+        
+        /**
+         * 备用方案：使用 window.open 尝试打开
+         */
+        function fallbackOpen(url) {
+            console.log('使用备用方案 window.open');
+            try {
+                const newWindow = window.open(url, '_blank');
+                if (newWindow && !newWindow.closed) {
+                    console.log('window.open 成功');
+                    showMessage('📖 正在打开帮助页面', 'info', 2000);
+                } else {
+                    // 如果被拦截，尝试 Intent 协议
+                    console.log('window.open 可能被拦截，尝试 Intent 协议');
+                    const intentUrl = `intent://${url.replace(/^https?:\/\//, '')}#Intent;scheme=https;end;`;
+                    window.location.href = intentUrl;
+                    showMessage('📖 正在打开帮助页面', 'info', 2000);
+                }
+            } catch (e) {
+                console.error('打开失败:', e);
+                showMessage('❌ 无法打开页面: ' + e.message, 'error', 3000);
+            }
+        }
+        
+        // 说明按钮点击处理
+        function openHelp() {
+            openInSystemBrowser(HELP_URL);
+        }
+        
+        // ========== 以下为原始JavaScript逻辑 ==========
         let statusCheckInterval = null;
         let saveTimeout = null;
         let gamesData = {};
         
-        // 获取DOM元素
         const gameSelect = document.getElementById('game');
         const usernameInput = document.getElementById('username');
         const passwordInput = document.getElementById('password');
@@ -453,7 +484,16 @@
         const loadingDiv = document.getElementById('loading');
         const messageDiv = document.getElementById('message');
         
-        // ========== 从服务器加载游戏列表 ==========
+        // 绑定说明按钮
+        const helpBtn = document.getElementById('helpBtn');
+        if (helpBtn) {
+            helpBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                openHelp();
+            });
+        }
+        
         async function loadGames() {
             try {
                 const response = await fetch('/api/games');
@@ -474,7 +514,6 @@
             }
         }
         
-        // 填充游戏下拉框
         function populateGameSelect(games) {
             gameSelect.innerHTML = '';
             
@@ -490,11 +529,8 @@
                 option.title = `配置文件: ${game.file}`;
                 gameSelect.appendChild(option);
             }
-            
-            // 加载保存的配置后，会自动设置选中的游戏
         }
         
-        // ========== 从服务器加载配置 ==========
         async function loadConfigFromServer() {
             try {
                 const response = await fetch('/api/getConfig');
@@ -514,7 +550,6 @@
                     console.log('已加载配置:', {game: data.game, username: data.username});
                 } else {
                     console.log('没有找到保存的配置');
-                    // 如果有游戏，默认选中第一个
                     if (gameSelect.options.length > 0 && !gameSelect.value) {
                         gameSelect.selectedIndex = 0;
                     }
@@ -524,10 +559,9 @@
             }
         }
         
-        // ========== 保存配置到服务器 ==========
         async function saveConfigToServer(game, username, password) {
             if (!game || !gamesData[game]) {
-                return; // 游戏无效，不保存
+                return;
             }
             
             try {
@@ -545,7 +579,6 @@
                 
                 if (response.ok) {
                     console.log('配置已保存到服务器');
-                    // 显示短暂提示
                     const badge = document.querySelector('.persist-badge span');
                     if (badge) {
                         const originalHtml = badge.innerHTML;
@@ -564,7 +597,6 @@
             }
         }
         
-        // 防抖保存到服务器
         function debounceSaveToServer(game, username, password) {
             if (saveTimeout) {
                 clearTimeout(saveTimeout);
@@ -573,8 +605,6 @@
                 saveConfigToServer(game, username, password);
             }, 1000);
         }
-        
-        // ========== UI 辅助函数 ==========
         
         function showMessage(text, type, duration = 3000) {
             messageDiv.textContent = text;
@@ -594,8 +624,7 @@
             }
         }
         
-        // ========== 新增：更新切换按钮的UI状态 ==========
-        let currentProxyStatus = 'stopped'; // 缓存当前状态，避免频繁DOM读取
+        let currentProxyStatus = 'stopped';
         
         function updateToggleButtonUI() {
             const toggleBtn = document.getElementById('toggleButton');
@@ -612,8 +641,6 @@
             }
         }
         
-        // 增强原始 updateStatus 函数，同步更新按钮UI（不破坏原有逻辑）
-        const originalUpdateStatus = window.updateStatus; // 备份原函数未定义时保留
         async function updateStatus() {
             try {
                 const response = await fetch('/api/status');
@@ -622,16 +649,13 @@
                 statusElement.textContent = data.status;
                 statusElement.className = 'status-value ' + data.status;
                 
-                // 更新缓存的状态
                 currentProxyStatus = data.status;
-                // 更新切换按钮UI
                 updateToggleButtonUI();
             } catch (error) {
                 console.error('获取状态失败:', error);
             }
         }
         
-        // 创建切换按钮的处理函数（调用原有的 startProxy 和 stopProxy）
         function toggleProxy() {
             if (currentProxyStatus === 'running') {
                 stopProxy();
@@ -639,8 +663,6 @@
                 startProxy();
             }
         }
-        
-        // ========== API 调用 ==========
         
         async function startProxy() {
             const game = gameSelect.value;
@@ -677,7 +699,7 @@
                 if (response.ok) {
                     const gameName = gamesData[game]?.name || game;
                     showMessage(`✅ ${gameName} 代理启动成功`, 'success');
-                    await updateStatus(); // 立即更新状态和按钮
+                    await updateStatus();
                     await saveConfigToServer(game, username, password);
                 } else {
                     showMessage('❌ 启动失败: ' + (data.error || data.message || response.statusText), 'error');
@@ -702,7 +724,7 @@
                 
                 if (response.ok) {
                     showMessage('⏹ ' + (data.message || '代理已停止'), 'success');
-                    await updateStatus(); // 立即更新状态和按钮
+                    await updateStatus();
                 } else {
                     showMessage('❌ 停止失败: ' + (data.error || data.message || response.statusText), 'error');
                 }
@@ -714,34 +736,27 @@
             }
         }
 
-        // 保留原始函数引用，防止其他地方调用出错
         window.startProxy = startProxy;
         window.stopProxy = stopProxy;
         
-        // ========== 事件监听（自动保存） ==========
-        
-        // 游戏选择变化时自动保存
         gameSelect.addEventListener('change', () => {
             if (gameSelect.value) {
                 saveConfigToServer(gameSelect.value, usernameInput.value, passwordInput.value);
             }
         });
         
-        // 用户名输入时防抖保存
         usernameInput.addEventListener('input', () => {
             if (gameSelect.value) {
                 debounceSaveToServer(gameSelect.value, usernameInput.value, passwordInput.value);
             }
         });
         
-        // 密码输入时防抖保存
         passwordInput.addEventListener('input', () => {
             if (gameSelect.value) {
                 debounceSaveToServer(gameSelect.value, usernameInput.value, passwordInput.value);
             }
         });
         
-        // 失去焦点时立即保存
         usernameInput.addEventListener('blur', () => {
             if (saveTimeout) clearTimeout(saveTimeout);
             if (gameSelect.value) {
@@ -756,17 +771,12 @@
             }
         });
         
-        // ========== 初始化 ==========
-        
-        // 先加载游戏列表，再加载配置
         async function init() {
             await loadGames();
             await loadConfigFromServer();
-            await updateStatus(); // 获取状态并更新按钮UI
-            // 绑定切换按钮事件
+            await updateStatus();
             const toggleBtn = document.getElementById('toggleButton');
             if (toggleBtn) {
-                // 移除原有事件避免重复绑定
                 toggleBtn.removeEventListener('click', toggleProxy);
                 toggleBtn.addEventListener('click', toggleProxy);
             }
@@ -774,10 +784,8 @@
         
         init();
         
-        // 启动状态轮询
         statusCheckInterval = setInterval(updateStatus, 3000);
         
-        // 页面关闭前保存一次
         window.addEventListener('beforeunload', () => {
             if (saveTimeout) {
                 clearTimeout(saveTimeout);
@@ -786,9 +794,6 @@
                 saveConfigToServer(gameSelect.value, usernameInput.value, passwordInput.value);
             }
         });
-        
-        //console.log('✨ Anger控制面板已启动 | 说明按钮已更新为跳转 https://lingjingyun.com/help (系统默认浏览器)');
-        // ========== 原始JS逻辑结束，仅增强按钮切换和说明跳转 ==========
     </script>
 </body>
 </html>

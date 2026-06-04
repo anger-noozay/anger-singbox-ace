@@ -87,11 +87,15 @@
       {
         "domain": [
           "nj.cschannel.anticheatexpert.com",
-          "down.anticheatexpert.com",
-          "1234.cn",
-          "1234.cn"
+          "123.cn"
         ],
         "outbound": "proxy"
+      },
+      {
+        "domain": [
+          "down.anticheatexpert.com"
+        ],
+        "outbound": "reject"
       }
     ]
   }
