@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"embed"
 	"encoding/json"
 	"flag"
@@ -48,21 +50,6 @@ var gameConfigs = map[string]GameInfo{
 		Icon:     "🚁",
 		Platform: "Android",
 	},*/
-	// 在这里添加新游戏示例：
-	// "lol": {
-	//     Name:     "英雄联盟",
-	//     File:     "configs/config_lol.json",
-	//     Enabled:  true,
-	//     Icon:     "🏆",
-	//     Platform: "PC",
-	// },
-	// "wzry": {
-	//     Name:     "王者荣耀",
-	//     File:     "configs/config_wzry.json",
-	//     Enabled:  true,
-	//     Icon:     "👑",
-	//     Platform: "Android",
-	// },
 }
 
 // 游戏信息结构
@@ -76,9 +63,10 @@ type GameInfo struct {
 
 // 持久化配置结构
 type PersistentConfig struct {
-	LastGame     string `json:"last_game"`
-	LastUsername string `json:"last_username"`
-	LastPassword string `json:"last_password"`
+	LastGame      string `json:"last_game"`
+	LastUsername  string `json:"last_username"`
+	LastPassword  string `json:"last_password"`
+	TotalDuration int64  `json:"total_duration"` // 累计连接时长（秒）
 }
 
 // API响应结构
@@ -88,10 +76,17 @@ type GameListResponse struct {
 }
 
 type SingBoxManager struct {
-	cmd         *exec.Cmd
-	mu          sync.RWMutex
-	configPath  string
-	persistPath string
+	cmd           *exec.Cmd
+	mu            sync.RWMutex
+	configPath    string
+	persistPath   string
+	startTime     time.Time // 本次启动时间
+	totalDuration int64     // 累计时长（秒，从文件加载）
+
+	// 连接状态缓存
+	connectedCache     bool
+	connectedCacheTime time.Time
+	connectedCacheMu   sync.RWMutex
 }
 
 type StartRequest struct {
@@ -100,11 +95,16 @@ type StartRequest struct {
 	Password string `json:"password"`
 }
 
+// StatusResponse 包含进程状态和连接状态
 type StatusResponse struct {
-	Status     string `json:"status"`
-	ConfigPath string `json:"configPath,omitempty"`
-	Game       string `json:"game,omitempty"`
-	Message    string `json:"message,omitempty"`
+	Status          string `json:"status"`
+	Connected       bool   `json:"connected"`        // 连接状态
+	TotalDuration   int64  `json:"total_duration"`   // 累计时长
+	SessionDuration int64  `json:"session_duration"` // 本次时长
+	NowTime         string `json:"now_time"`         // 当前时间
+	ConfigPath      string `json:"configPath,omitempty"`
+	Game            string `json:"game,omitempty"`
+	Message         string `json:"message,omitempty"`
 }
 
 type ErrorResponse struct {
@@ -124,6 +124,101 @@ func init() {
 	manager = &SingBoxManager{
 		persistPath: persistPath,
 	}
+	// 加载累计时长
+	manager.loadTotalDuration()
+}
+
+// 加载累计时长
+func (m *SingBoxManager) loadTotalDuration() {
+	config, err := m.LoadConfig()
+	if err != nil {
+		log.Printf("加载累计时长失败: %v", err)
+		return
+	}
+	if config != nil {
+		m.totalDuration = config.TotalDuration
+		log.Printf("已加载累计时长: %d 秒", m.totalDuration)
+	}
+}
+
+// 保存累计时长
+func (m *SingBoxManager) saveTotalDuration() error {
+	// 读取现有配置
+	config, err := m.LoadConfig()
+	if err != nil {
+		log.Printf("读取配置失败: %v", err)
+	}
+	if config == nil {
+		config = &PersistentConfig{}
+	}
+
+	// 更新累计时长
+	config.TotalDuration = m.totalDuration
+
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("序列化配置失败: %v", err)
+	}
+
+	if err := os.WriteFile(m.persistPath, data, 0644); err != nil {
+		return fmt.Errorf("写入配置文件失败: %v", err)
+	}
+
+	log.Printf("累计时长已保存: %d 秒", m.totalDuration)
+	return nil
+}
+
+// 检查连接状态（执行 curl 检测）
+func (m *SingBoxManager) checkConnected() bool {
+	// 执行 curl 检测，设置 3 秒超时
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "curl", "-s", "https://www.image2url.com/r2/default/files/1780635335272-7e891552-28bb-4219-9310-a93e05135b84.txt")
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+
+	err := cmd.Run()
+	if err != nil {
+		log.Printf("连接检测失败: %v", err)
+		return false
+	}
+
+	// 判断返回内容是否为 "1"
+	result := strings.TrimSpace(stdout.String())
+	connected := (result == "1")
+	log.Printf("连接检测结果: %v (返回: %q)", connected, result)
+	return connected
+}
+
+// 获取连接状态（带缓存，60秒过期）
+func (m *SingBoxManager) getConnectedWithCache() bool {
+	m.connectedCacheMu.RLock()
+	// 如果缓存有效（60秒内），直接返回
+	if !m.connectedCacheTime.IsZero() && time.Since(m.connectedCacheTime) < 60*time.Second {
+		cached := m.connectedCache
+		m.connectedCacheMu.RUnlock()
+		log.Printf("连接检测使用缓存: %v (缓存时间: %v)", cached, m.connectedCacheTime)
+		return cached
+	}
+	m.connectedCacheMu.RUnlock()
+
+	// 缓存过期，重新检测
+	m.connectedCacheMu.Lock()
+	defer m.connectedCacheMu.Unlock()
+
+	// 双重检查
+	if !m.connectedCacheTime.IsZero() && time.Since(m.connectedCacheTime) < 60*time.Second {
+		log.Printf("连接检测双重检查使用缓存: %v", m.connectedCache)
+		return m.connectedCache
+	}
+
+	// 执行检测
+	connected := m.checkConnected()
+	m.connectedCache = connected
+	m.connectedCacheTime = time.Now()
+	log.Printf("连接检测已更新: %v (检测时间: %v)", connected, m.connectedCacheTime)
+	return connected
 }
 
 // 获取启用的游戏列表
@@ -139,11 +234,20 @@ func getEnabledGames() map[string]GameInfo {
 
 // 保存配置到文件
 func (m *SingBoxManager) SaveConfig(game, username, password string) error {
-	config := PersistentConfig{
-		LastGame:     game,
-		LastUsername: username,
-		LastPassword: password,
+	// 读取现有配置，保留 totalDuration
+	config, err := m.LoadConfig()
+	if err != nil {
+		log.Printf("读取配置失败: %v", err)
 	}
+	if config == nil {
+		config = &PersistentConfig{}
+	}
+
+	config.LastGame = game
+	config.LastUsername = username
+	config.LastPassword = password
+	// 保留原有的 TotalDuration
+	config.TotalDuration = m.totalDuration
 
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
@@ -173,7 +277,7 @@ func (m *SingBoxManager) LoadConfig() (*PersistentConfig, error) {
 		return nil, fmt.Errorf("解析配置文件失败: %v", err)
 	}
 
-	log.Printf("已加载配置: game=%s, username=%s", config.LastGame, config.LastUsername)
+	log.Printf("已加载配置: game=%s, username=%s, total_duration=%d", config.LastGame, config.LastUsername, config.TotalDuration)
 	return &config, nil
 }
 
@@ -211,6 +315,11 @@ func (m *SingBoxManager) Start(configPath string) error {
 		return fmt.Errorf("sing-box 已经在运行中")
 	}
 
+	// 启动时清空连接缓存
+	m.connectedCacheMu.Lock()
+	m.connectedCacheTime = time.Time{}
+	m.connectedCacheMu.Unlock()
+
 	// 确保二进制文件存在
 	singboxPath := "/data/local/tmp/sing-box"
 	if _, err := os.Stat(singboxPath); os.IsNotExist(err) {
@@ -235,18 +344,37 @@ func (m *SingBoxManager) Start(configPath string) error {
 
 	m.cmd = cmd
 	m.configPath = configPath
-	log.Printf("sing-box 已启动，配置文件: %s", configPath)
+	m.startTime = time.Now()
+	log.Printf("sing-box 已启动，配置文件: %s, 启动时间: %v", configPath, m.startTime)
 
 	// 监控进程退出
 	go func() {
 		err := cmd.Wait()
 		m.mu.Lock()
 		defer m.mu.Unlock()
+
+		// 进程退出时累计时长
+		if m.cmd != nil && !m.startTime.IsZero() {
+			duration := int64(time.Since(m.startTime).Seconds())
+			m.totalDuration += duration
+			log.Printf("本次连接时长: %d 秒, 累计总时长: %d 秒", duration, m.totalDuration)
+			if saveErr := m.saveTotalDuration(); saveErr != nil {
+				log.Printf("保存累计时长失败: %v", saveErr)
+			}
+		}
+
+		m.cmd = nil
+		m.configPath = ""
+		m.startTime = time.Time{}
+
+		// 进程退出时清空缓存
+		m.connectedCacheMu.Lock()
+		m.connectedCacheTime = time.Time{}
+		m.connectedCacheMu.Unlock()
+
 		if err != nil {
 			log.Printf("sing-box 进程退出: %v", err)
 		}
-		m.cmd = nil
-		m.configPath = ""
 	}()
 
 	return nil
@@ -265,6 +393,21 @@ func (m *SingBoxManager) Stop() error {
 		return fmt.Errorf("停止失败: %v", err)
 	}
 
+	// 停止时清空连接缓存
+	m.connectedCacheMu.Lock()
+	m.connectedCacheTime = time.Time{}
+	m.connectedCacheMu.Unlock()
+
+	// 累计时长
+	if !m.startTime.IsZero() {
+		duration := int64(time.Since(m.startTime).Seconds())
+		m.totalDuration += duration
+		log.Printf("停止时本次连接时长: %d 秒, 累计总时长: %d 秒", duration, m.totalDuration)
+		if saveErr := m.saveTotalDuration(); saveErr != nil {
+			log.Printf("保存累计时长失败: %v", saveErr)
+		}
+	}
+
 	// 清理临时配置文件
 	if m.configPath != "" {
 		os.Remove(m.configPath)
@@ -273,6 +416,7 @@ func (m *SingBoxManager) Stop() error {
 
 	m.cmd = nil
 	m.configPath = ""
+	m.startTime = time.Time{}
 
 	return nil
 }
@@ -283,12 +427,49 @@ func (m *SingBoxManager) Status() StatusResponse {
 	defer m.mu.RUnlock()
 
 	resp := StatusResponse{}
+
+	// 进程状态
 	if m.cmd != nil && m.cmd.Process != nil {
 		resp.Status = "running"
 		resp.ConfigPath = m.configPath
+
+		// 计算 session_duration
+		if !m.startTime.IsZero() {
+			resp.SessionDuration = int64(time.Since(m.startTime).Seconds())
+		} else {
+			resp.SessionDuration = 0
+		}
+
+		// 累计时长
+		resp.TotalDuration = m.totalDuration
+
+		// 当前时间
+		resp.NowTime = time.Now().Format("2006-01-02 15:04:05")
 	} else {
 		resp.Status = "stopped"
+		resp.Connected = false
+		resp.SessionDuration = 0
+		resp.TotalDuration = m.totalDuration
+		resp.NowTime = time.Now().Format("2006-01-02 15:04:05")
 	}
+	return resp
+}
+
+// StatusWithConnected 获取带连接检测的状态（使用缓存）
+func (m *SingBoxManager) StatusWithConnected() StatusResponse {
+	resp := m.Status()
+
+	// 只有在 running 状态时才获取连接状态（使用缓存）
+	if resp.Status == "running" {
+		resp.Connected = m.getConnectedWithCache()
+	} else {
+		resp.Connected = false
+		// 进程停止时，清空缓存
+		m.connectedCacheMu.Lock()
+		m.connectedCacheTime = time.Time{}
+		m.connectedCacheMu.Unlock()
+	}
+
 	return resp
 }
 
@@ -418,7 +599,8 @@ func handleStop(w http.ResponseWriter, r *http.Request) {
 
 // 获取状态
 func handleStatus(w http.ResponseWriter, r *http.Request) {
-	status := manager.Status()
+	// 使用带连接检测的状态（有缓存）
+	status := manager.StatusWithConnected()
 	writeJSON(w, status, http.StatusOK)
 }
 
